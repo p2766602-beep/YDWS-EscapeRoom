@@ -97,6 +97,7 @@ function renderErrorBox() {
 function renderEntryScreen() {
   const seatInput = el('input', { type: 'text', id: 'seat', placeholder: '例如：ps100001' });
   const nameInput = el('input', { type: 'text', id: 'name', placeholder: '例如：王小明' });
+  const firstTimeCheckbox = el('input', { type: 'checkbox', id: 'first-time' });
 
   const difficultySelect = el(
     'select',
@@ -111,7 +112,7 @@ function renderEntryScreen() {
 
   const submitBtn = el('button', {
     class: 'btn-primary',
-    text: state.loading ? '召喚中……' : '踏入密室',
+    text: state.loading ? '召喚中……' : '開始探索！',
     onClick: async () => {
       const seat = seatInput.value.trim();
       const name = nameInput.value.trim();
@@ -119,19 +120,49 @@ function renderEntryScreen() {
         state.error = '學號和姓名都要填喔，勇者。';
         return render();
       }
-      state.studentId = `${seat}-${name}`;
+      const studentId = `${seat}-${name}`;
       state.error = '';
-      state.screen = 'overview';
+      state.loading = true;
       render();
-      await loadOverview();
+      try {
+        const data = await getOverview({ studentId });
+        // 有沒有「帳號」沒有獨立欄位，靠13主題×2難度裡是否曾出現任何一筆紀錄來判斷。
+        const hasAnyRecord = data.topics.some((t) => t.basic !== 'not_started' || t.advanced !== 'not_started');
+        if (firstTimeCheckbox.checked && hasAnyRecord) {
+          state.error = '這個學號已經有紀錄囉！如果你是回來接續進度的舊生，請取消勾選「第一次使用」再試一次。';
+          state.loading = false;
+          return render();
+        }
+        if (!firstTimeCheckbox.checked && !hasAnyRecord) {
+          state.error = '查無這個學號的任何紀錄。如果你是第一次使用，請勾選「第一次使用」再試一次；如果不是，請確認學號和姓名有沒有打錯字。';
+          state.loading = false;
+          return render();
+        }
+        state.studentId = studentId;
+        state.overviewTopics = data.topics;
+        state.screen = 'overview';
+      } catch (err) {
+        state.error = err.message;
+      }
+      state.loading = false;
+      render();
     },
   });
 
+  const difficultyRow = el('div', { class: 'field-inline' }, [
+    el('label', { text: '選擇難度' }),
+    difficultySelect,
+  ]);
+
+  const seatRow = el('div', { class: 'field-inline' }, [
+    el('label', { text: '學號' }),
+    el('label', { class: 'checkbox-inline' }, [firstTimeCheckbox, document.createTextNode(' 第一次使用')]),
+  ]);
+
   renderCard([
     el('h1', { text: '🔮 真理大廳：演算法密室逃脫' }),
-    el('label', { text: '選擇難度（整個旅程共用，之後不再更換）' }),
-    difficultySelect,
-    el('label', { text: '學號' }),
+    difficultyRow,
+    seatRow,
     seatInput,
     el('label', { text: '姓名' }),
     nameInput,
@@ -145,7 +176,7 @@ async function loadOverview() {
   state.error = '';
   render();
   try {
-    const data = await getOverview({ studentId: state.studentId, difficulty: state.difficulty });
+    const data = await getOverview({ studentId: state.studentId });
     state.overviewTopics = data.topics;
   } catch (err) {
     state.error = err.message;
@@ -154,9 +185,19 @@ async function loadOverview() {
   render();
 }
 
+// 目前這次選定的難度下的狀態（進行中/建議下一步用這個判斷）。
 function statusOf(code) {
   const found = (state.overviewTopics || []).find((t) => t.topic === code);
-  return found ? found.status : 'not_started';
+  return found ? found[state.difficulty] : 'not_started';
+}
+
+// 跨難度的成就徽章：曾經過關的最高難度（進階版優先），不受目前選定難度影響。
+function achievementOf(code) {
+  const found = (state.overviewTopics || []).find((t) => t.topic === code);
+  if (!found) return 'none';
+  if (found.advanced === 'completed') return 'advanced';
+  if (found.basic === 'completed') return 'basic';
+  return 'none';
 }
 
 // 建議下一步＝依Tier順序第一個「還沒完成」的主題，軟性推薦、不鎖關（任何節點都能點）。
@@ -167,7 +208,7 @@ function recommendedCode() {
 
 function renderOverviewScreen() {
   const header = el('div', { class: 'overview-header' }, [
-    el('h1', { text: '🗺️ 真理大廳：主題總覽' }),
+    el('h1', { text: '🗺️ 真理大廳：主題探索地圖' }),
     el('p', { class: 'overview-sub', text: `${state.studentId}｜${DIFFICULTIES.find((d) => d.code === state.difficulty).name}` }),
     el('a', {
       href: '#',
@@ -216,15 +257,26 @@ function renderOverviewScreen() {
 
 function renderNode(topicDef, recommended) {
   const status = statusOf(topicDef.code);
-  const stateClass = status === 'completed'
-    ? 'node--done'
-    : status === 'in_progress'
-      ? 'node--in-progress'
-      : topicDef.code === recommended
-        ? 'node--recommended'
-        : 'node--available';
+  const achievement = achievementOf(topicDef.code);
 
-  const badge = status === 'completed' ? '✅' : status === 'in_progress' ? '◐' : '';
+  let stateClass;
+  let badge;
+  if (achievement === 'advanced') {
+    stateClass = 'node--ach-advanced';
+    badge = '🏆';
+  } else if (achievement === 'basic') {
+    stateClass = 'node--ach-basic';
+    badge = '✅';
+  } else if (status === 'in_progress') {
+    stateClass = 'node--in-progress';
+    badge = '◐';
+  } else if (topicDef.code === recommended) {
+    stateClass = 'node--recommended';
+    badge = '';
+  } else {
+    stateClass = 'node--available';
+    badge = '';
+  }
 
   return el('button', {
     class: `node ${stateClass}`,
@@ -354,6 +406,15 @@ function renderLevelScreen() {
   const content = state.content;
   const children = [
     el('h1', { text: `${state.topicName} — Level ${state.level} / 5` }),
+    el('a', {
+      href: '#',
+      class: 'level-back-link',
+      text: '← 返回總覽（可以先去看看別的主題，之後回來會接續這一關的進度）',
+      onClick: (e) => {
+        e.preventDefault();
+        returnToOverview();
+      },
+    }),
     renderFragments(),
     renderFeedback(),
     renderErrorBox(),

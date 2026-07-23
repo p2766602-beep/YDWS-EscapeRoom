@@ -410,23 +410,31 @@ async function handleAnswer(request, env, headers) {
   );
 }
 
-// 總覽畫面用：一次查13主題在目前難度下的進度狀態，決定節點要顯示已完成/進行中/未開始。
-// 難度在entry畫面選定一次、13主題共用同一個難度場次，所以只需要13個KV get，不需要list(prefix)。
+// 總覽畫面用：一次查13主題在「基礎版／進階版」兩個難度下各自的進度狀態。
+// 節點的光暈顏色要能區分「過了基礎版」跟「過了進階版」，這是跨難度的成就徽章，
+// 不是只看目前這次選定的難度，所以兩個難度都要查（13主題×2難度＝26次KV get，仍然
+// 遠比list(prefix)簡單且沒有最終一致性風險）。目前這次選定的難度用來判斷「進行中/
+// 建議下一步」，由前端自己從回傳的basic/advanced狀態裡挑對應的那一個來看。
 async function handleOverview(request, env, headers) {
   const body = await request.json().catch(() => null);
   if (!body) return jsonResponse({ error: '請求格式錯誤' }, 400, headers);
 
   const studentId = String(body.studentId || '').trim().slice(0, 100);
-  const difficulty = normalizeDifficulty(body.difficulty);
   if (!studentId) return jsonResponse({ error: '缺少必要欄位（studentId）' }, 400, headers);
 
   const kv = env.ESCAPE_ROOM_KV;
+  const statusFor = (progress) => {
+    if (!progress) return 'not_started';
+    return progress.status === 'completed' ? 'completed' : 'in_progress';
+  };
+
   const topics = await Promise.all(
     TOPIC_CODES.map(async (topic) => {
-      const progress = await loadProgress(kv, topic, difficulty, studentId);
-      if (!progress) return { topic, status: 'not_started' };
-      if (progress.status === 'completed') return { topic, status: 'completed' };
-      return { topic, status: 'in_progress', level: progress.level };
+      const [basicProgress, advancedProgress] = await Promise.all([
+        loadProgress(kv, topic, 'basic', studentId),
+        loadProgress(kv, topic, 'advanced', studentId),
+      ]);
+      return { topic, basic: statusFor(basicProgress), advanced: statusFor(advancedProgress) };
     }),
   );
 
