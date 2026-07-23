@@ -1,0 +1,4 @@
+GEMINI_API_KEY=你的Gemini API金鑰
+
+# 複製這個檔案為 .dev.vars（不會被git追蹤），wrangler dev 會自動讀取。
+# 可以跟 BlocklyYdws 的 workers/ai-companion 共用同一把金鑰。
