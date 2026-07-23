@@ -292,6 +292,8 @@ async function handleAnswer(request, env, headers) {
       );
     }
     try {
+      // 連續答錯時要讓引導逐漸更直白，避免學生卡在同一種模糊程度太久而挫折。
+      const priorFailedAttempts = progress.attemptLog.filter((a) => a.level === level && !a.pass).length;
       const judgeReq = buildTextJudgeRequest({
         topicName: progress.topicName,
         level,
@@ -300,6 +302,7 @@ async function handleAnswer(request, env, headers) {
         referenceAnswer: buildReferenceAnswer(levelKind, storedContent),
         referenceHints: levelKind === 'text' ? storedContent.targetHints : [],
         studentAnswer: answerText,
+        attemptNumber: priorFailedAttempts + 1,
       });
       const result = await callGeminiJSON(env, judgeReq);
       pass = Boolean(result.pass);
