@@ -4,6 +4,7 @@ import { startTopic, submitAnswer } from './api.js';
 const TOPICS = [
   { code: 'max_value', name: '找最大值' },
   { code: 'selection_sort', name: '選擇排序' },
+  { code: 'greedy', name: '貪婪演算法' },
 ];
 
 const app = document.getElementById('app');
