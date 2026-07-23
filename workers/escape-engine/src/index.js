@@ -1,11 +1,17 @@
 import {
   LEVEL_DEFS,
+  DIFFICULTY_LEVELS,
   buildGenerationRequest,
   buildTextJudgeRequest,
   buildEncourageRequest,
   buildLiteracyReviewRequest,
   publicContent,
 } from './prompts.js';
+
+function normalizeDifficulty(value) {
+  const key = String(value || '').trim();
+  return DIFFICULTY_LEVELS[key] ? key : 'basic';
+}
 
 const GEMINI_MODEL = 'gemini-flash-lite-latest';
 const TOTAL_LEVELS = 5;
@@ -74,18 +80,20 @@ async function callGeminiJSON(env, { systemInstruction, userPrompt, schema, temp
   return JSON.parse(text);
 }
 
-function progressKey(topic, studentId) {
-  return `progress:${topic}:${studentId}`;
+// 難度是topic之外另一個決定進度身分的維度：同一個學生同一個主題換難度玩，要當成不同場次，
+// 不能沿用另一個難度留下的進度。
+function progressKey(topic, difficulty, studentId) {
+  return `progress:${topic}:${difficulty}:${studentId}`;
 }
 
-async function loadProgress(kv, topic, studentId) {
-  const raw = await kv.get(progressKey(topic, studentId));
+async function loadProgress(kv, topic, difficulty, studentId) {
+  const raw = await kv.get(progressKey(topic, difficulty, studentId));
   return raw ? JSON.parse(raw) : null;
 }
 
-async function saveProgress(kv, topic, studentId, progress) {
+async function saveProgress(kv, topic, difficulty, studentId, progress) {
   // 90天過期，跟ai-companion的KV慣例一致，不會無限累積
-  await kv.put(progressKey(topic, studentId), JSON.stringify(progress), { expirationTtl: 90 * 24 * 3600 });
+  await kv.put(progressKey(topic, difficulty, studentId), JSON.stringify(progress), { expirationTtl: 90 * 24 * 3600 });
 }
 
 function pickRandomPrime() {
@@ -108,8 +116,8 @@ function shuffleWithMapping(items) {
   return { steps, correctOrder };
 }
 
-async function generateLevelContent(env, level, topicName, coreSentence, topicCode) {
-  const req = buildGenerationRequest(level, topicName, coreSentence, topicCode);
+async function generateLevelContent(env, level, topicName, coreSentence, topicCode, difficulty) {
+  const req = buildGenerationRequest(level, topicName, coreSentence, topicCode, difficulty);
   const content = await callGeminiJSON(env, req);
   if (level === 4) {
     const { steps, correctOrder } = shuffleWithMapping(content.orderedSteps);
@@ -170,13 +178,14 @@ async function handleStart(request, env, headers) {
   const studentId = String(body.studentId || '').trim().slice(0, 100);
   const topic = String(body.topic || '').trim();
   const topicName = String(body.topicName || topic).trim();
+  const difficulty = normalizeDifficulty(body.difficulty);
 
   if (!studentId || !topic) {
     return jsonResponse({ error: '缺少必要欄位（studentId / topic）' }, 400, headers);
   }
 
   const kv = env.ESCAPE_ROOM_KV;
-  let progress = await loadProgress(kv, topic, studentId);
+  let progress = await loadProgress(kv, topic, difficulty, studentId);
 
   if (progress) {
     if (progress.status === 'completed') {
@@ -201,7 +210,7 @@ async function handleStart(request, env, headers) {
 
   let content;
   try {
-    content = await generateLevelContent(env, 1, topicName, null, topic);
+    content = await generateLevelContent(env, 1, topicName, null, topic, difficulty);
   } catch (err) {
     return jsonResponse({ error: 'AI 出題暫時失敗，請稍後再試。' }, 502, headers);
   }
@@ -209,6 +218,7 @@ async function handleStart(request, env, headers) {
   progress = {
     topic,
     topicName,
+    difficulty,
     level: 1,
     status: 'in_progress',
     coreSentence: content.coreSentence,
@@ -218,7 +228,7 @@ async function handleStart(request, env, headers) {
     attemptLog: [],
     review: null,
   };
-  await saveProgress(kv, topic, studentId, progress);
+  await saveProgress(kv, topic, difficulty, studentId, progress);
 
   return jsonResponse(
     {
@@ -242,13 +252,14 @@ async function handleAnswer(request, env, headers) {
   const level = parseInt(body.level, 10);
   const mode = String(body.mode || '').trim();
   const answer = body.answer;
+  const difficulty = normalizeDifficulty(body.difficulty);
 
   if (!studentId || !topic || !level || !mode) {
     return jsonResponse({ error: '缺少必要欄位（studentId / topic / level / mode）' }, 400, headers);
   }
 
   const kv = env.ESCAPE_ROOM_KV;
-  const progress = await loadProgress(kv, topic, studentId);
+  const progress = await loadProgress(kv, topic, difficulty, studentId);
 
   if (!progress || progress.status === 'completed' || progress.level !== level) {
     return jsonResponse({ error: '關卡狀態不同步，請重新整理頁面。' }, 409, headers);
@@ -301,7 +312,7 @@ async function handleAnswer(request, env, headers) {
   progress.attemptLog.push({ level, mode, pass, answerText: summarizeAnswerText(mode, answer) });
 
   if (!pass) {
-    await saveProgress(kv, topic, studentId, progress);
+    await saveProgress(kv, topic, difficulty, studentId, progress);
     return jsonResponse({ pass: false, feedback }, 200, headers);
   }
 
@@ -330,7 +341,7 @@ async function handleAnswer(request, env, headers) {
       progress.review = null; // 回顧生成失敗不擋過關，金鑰跟碎片才是遊戲儀式感的核心產出
     }
 
-    await saveProgress(kv, topic, studentId, progress);
+    await saveProgress(kv, topic, difficulty, studentId, progress);
     return jsonResponse(
       {
         pass: true,
@@ -349,14 +360,14 @@ async function handleAnswer(request, env, headers) {
   const nextLevel = level + 1;
   let nextContent;
   try {
-    nextContent = await generateLevelContent(env, nextLevel, progress.topicName, progress.coreSentence, topic);
+    nextContent = await generateLevelContent(env, nextLevel, progress.topicName, progress.coreSentence, topic, difficulty);
   } catch (err) {
     return jsonResponse({ error: 'AI 出下一關暫時失敗，請稍後再試。' }, 502, headers);
   }
 
   progress.level = nextLevel;
   progress.currentContent = nextContent;
-  await saveProgress(kv, topic, studentId, progress);
+  await saveProgress(kv, topic, difficulty, studentId, progress);
 
   return jsonResponse(
     {

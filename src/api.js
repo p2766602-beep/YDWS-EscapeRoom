@@ -16,10 +16,10 @@ async function postJSON(path, body) {
   return data;
 }
 
-export function startTopic({ studentId, topic, topicName }) {
-  return postJSON('/level/start', { studentId, topic, topicName });
+export function startTopic({ studentId, topic, topicName, difficulty }) {
+  return postJSON('/level/start', { studentId, topic, topicName, difficulty });
 }
 
-export function submitAnswer({ studentId, topic, level, mode, answer }) {
-  return postJSON('/level/answer', { studentId, topic, level, mode, answer });
+export function submitAnswer({ studentId, topic, level, mode, answer, difficulty }) {
+  return postJSON('/level/answer', { studentId, topic, level, mode, answer, difficulty });
 }

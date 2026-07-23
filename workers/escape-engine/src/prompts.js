@@ -153,16 +153,33 @@ const TOPIC_CLARIFICATIONS = {
 是全域最佳解，也照樣往前走，不會走回頭路重新評估之前的選擇。`,
 };
 
-export function buildGenerationRequest(level, topicName, coreSentence, topicCode) {
+// 難度分版：用「學生自選難度」取代「用年級判斷難度」，因為資優班內部能力落差本身就大，
+// 年級不是準確的能力代理指標。跟TOPIC_CLARIFICATIONS一樣是注入生成prompt的額外指示。
+export const DIFFICULTY_LEVELS = {
+  basic: { name: '基礎版' },
+  advanced: { name: '進階版' },
+};
+
+const DIFFICULTY_INSTRUCTIONS = {
+  basic: `難度設定：基礎版。用詞盡量淺白具體，貼近國小到國中一般學生的生活經驗，句子不要太長、
+不要用抽象或艱澀的詞彙。情境和選項設計簡單直接一點即可，不用刻意堆疊多層干擾或轉折，讓學生
+能專注在核心概念本身。`,
+  advanced: `難度設定：進階版。可以用更精確、更抽象的詞彙與情境，鼓勵設計需要多一層推理才能
+分辨的干擾選項（例如把相鄰概念的特徵刻意混進錯誤選項，或是情境本身要多繞一層才能對應到核心
+概念），提供更有挑戰性的思考空間給程度較好的學生。`,
+};
+
+export function buildGenerationRequest(level, topicName, coreSentence, topicCode, difficulty) {
   const instructionBody = LEVEL_INSTRUCTIONS[level](topicName);
   const coreSentenceContext = coreSentence
     ? `\n\n這個主題先前已經定下的核心觀點句子是：「${coreSentence}」。這一關的內容要圍繞這句話的
 概念出題，維持前後關卡的一致性，但不要在題目裡直接把這句話整句念出來。`
     : '';
   const clarification = TOPIC_CLARIFICATIONS[topicCode] ? `\n\n${TOPIC_CLARIFICATIONS[topicCode]}` : '';
+  const difficultyInstruction = DIFFICULTY_INSTRUCTIONS[difficulty] ? `\n\n${DIFFICULTY_INSTRUCTIONS[difficulty]}` : '';
   return {
     systemInstruction: PERSONA_INSTRUCTION,
-    userPrompt: `${instructionBody}${coreSentenceContext}${clarification}\n\n請輸出符合schema的JSON。`,
+    userPrompt: `${instructionBody}${coreSentenceContext}${clarification}${difficultyInstruction}\n\n請輸出符合schema的JSON。`,
     schema: LEVEL_SCHEMAS[level],
   };
 }

@@ -7,12 +7,19 @@ const TOPICS = [
   { code: 'greedy', name: '貪婪演算法' },
 ];
 
+// 自選難度取代年級分版：資優班內部能力落差本身就大，年級不是準確的能力代理指標。
+const DIFFICULTIES = [
+  { code: 'basic', name: '基礎版' },
+  { code: 'advanced', name: '進階版' },
+];
+
 const app = document.getElementById('app');
 
 const state = {
   screen: 'identity', // identity | level | completed
   topic: TOPICS[0].code,
   topicName: TOPICS[0].name,
+  difficulty: DIFFICULTIES[0].code,
   studentId: '',
   level: null,
   levelKind: null,
@@ -77,6 +84,17 @@ function renderIdentityScreen() {
   );
   topicSelect.value = state.topic;
 
+  const difficultySelect = el(
+    'select',
+    {
+      onChange: (e) => {
+        state.difficulty = e.target.value;
+      },
+    },
+    DIFFICULTIES.map((d) => el('option', { value: d.code, text: d.name })),
+  );
+  difficultySelect.value = state.difficulty;
+
   const submitBtn = el('button', {
     class: 'btn-primary',
     text: state.loading ? '召喚中……' : '踏入密室',
@@ -92,7 +110,12 @@ function renderIdentityScreen() {
       state.loading = true;
       render();
       try {
-        const data = await startTopic({ studentId: state.studentId, topic: state.topic, topicName: state.topicName });
+        const data = await startTopic({
+          studentId: state.studentId,
+          topic: state.topic,
+          topicName: state.topicName,
+          difficulty: state.difficulty,
+        });
         applyStartResponse(data);
       } catch (err) {
         state.error = err.message;
@@ -106,6 +129,8 @@ function renderIdentityScreen() {
     el('h1', { text: '🔮 真理大廳：演算法密室逃脫' }),
     el('label', { text: '選擇密室主題（垂直切片驗證用，非正式選單）' }),
     topicSelect,
+    el('label', { text: '選擇難度' }),
+    difficultySelect,
     el('label', { text: '座號' }),
     seatInput,
     el('label', { text: '姓名' }),
@@ -172,6 +197,7 @@ async function doSubmit(mode, answer) {
       level: state.level,
       mode,
       answer,
+      difficulty: state.difficulty,
     });
     applyAnswerResponse(data);
   } catch (err) {
