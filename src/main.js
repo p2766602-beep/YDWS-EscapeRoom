@@ -297,6 +297,21 @@ function renderLevelScreen() {
   renderCard(children);
 }
 
+function resetToIdentityScreen() {
+  state.screen = 'identity';
+  state.studentId = '';
+  state.level = null;
+  state.levelKind = null;
+  state.content = null;
+  state.fragments = [];
+  state.finalKey = null;
+  state.review = null;
+  state.dragOrder = null;
+  state.lastFeedback = null;
+  state.error = '';
+  render();
+}
+
 function renderCompletedScreen() {
   renderCard([
     el('h1', { text: '🎉 恭喜通關！' }),
@@ -304,6 +319,7 @@ function renderCompletedScreen() {
     el('p', { text: '請截圖此畫面，向現場主持人領取你的獎品！' }),
     el('div', { class: 'key-display', text: `🗝️ ${state.finalKey}` }),
     renderFragments(),
+    el('button', { class: 'btn-primary', text: '再挑戰新的密室', onClick: resetToIdentityScreen }),
   ]);
 
   renderReviewCard();
