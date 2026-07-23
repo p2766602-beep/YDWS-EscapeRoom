@@ -100,6 +100,16 @@ function pickRandomPrime() {
   return THREE_DIGIT_PRIMES[Math.floor(Math.random() * THREE_DIGIT_PRIMES.length)];
 }
 
+// 防線二：就算prompt要求AI不要自己標序號，實測發現AI偶爾還是會手滑寫「第一步：」「首先，」
+// 這類會洩漏正確順序的開頭字樣（一旦寫進steps文字裡，不管畫面怎麼打亂呈現順序，玩家直接照
+// 序數詞排列就能過關，等於沒有打亂）。這裡用code把常見洩題字樣從每個步驟開頭剝掉，不完全
+//依賴AI照做指示——跟Level4的correctOrder不假手AI做index運算是同一個防禦原則。
+function stripOrdinalLeakage(text) {
+  return String(text || '')
+    .replace(/^\s*(第[一二三四五六七八九十0-9]+步|step\s*\d+|[①②③④⑤⑥⑦⑧⑨⑩]|首先|接著|然後|再來|最後|最終)[：:，,、]?\s*/i, '')
+    .trim();
+}
+
 function shuffleWithMapping(items) {
   // Fisher-Yates洗牌，同時記錄「原始順序的第m個步驟，被放到打亂後的第幾個位置」，
   // 讓正確順序的比對完全交給程式碼算，不依賴AI自己輸出的index。
@@ -120,6 +130,7 @@ async function generateLevelContent(env, level, topicName, coreSentence, topicCo
   const req = buildGenerationRequest(level, topicName, coreSentence, topicCode, difficulty);
   const content = await callGeminiJSON(env, req);
   if (level === 4) {
+    content.orderedSteps = content.orderedSteps.map(stripOrdinalLeakage);
     const { steps, correctOrder } = shuffleWithMapping(content.orderedSteps);
     content.steps = steps;
     content.correctOrder = correctOrder;
