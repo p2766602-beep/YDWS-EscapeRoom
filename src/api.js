@@ -1,5 +1,7 @@
-// 本機開發指向wrangler dev本機Worker，之後要正式串接時換成部署後的*.workers.dev網址。
-export const WORKER_URL = 'http://127.0.0.1:8787';
+// 本機開發（vite dev）指向wrangler dev本機Worker；build出來的正式版本指向已部署的Worker。
+export const WORKER_URL = import.meta.env.DEV
+  ? 'http://127.0.0.1:8787'
+  : 'https://ydws-escaperoom-engine.tnjboxing.workers.dev';
 
 async function postJSON(path, body) {
   const resp = await fetch(`${WORKER_URL}${path}`, {
