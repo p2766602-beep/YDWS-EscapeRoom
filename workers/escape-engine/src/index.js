@@ -16,6 +16,17 @@ function normalizeDifficulty(value) {
 const GEMINI_MODEL = 'gemini-flash-lite-latest';
 const TOTAL_LEVELS = 5;
 
+// 13主題官方清單（BlocklyYdws docs/密室逃脫獨立專案-架構規格.md §1/§8定案），供總覽API
+// 依序查詢每個主題的KV進度。前3個沿用垂直切片驗證期間就使用的代碼，避免破壞已測過的資料。
+const TOPIC_CODES = [
+  'max_value', 'find_min', 'linear_search',
+  'bubble_sort', 'selection_sort', 'insertion_sort',
+  'binary_search',
+  'recursion_basics', 'merge_sort',
+  'greedy', 'dfs', 'bfs',
+  'dp',
+];
+
 // 三位數質數清單，過關金鑰從這裡隨機挑，不讓AI自己編（避免編出非質數或重複配發）。
 const THREE_DIGIT_PRIMES = [
   101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197,
@@ -399,6 +410,29 @@ async function handleAnswer(request, env, headers) {
   );
 }
 
+// 總覽畫面用：一次查13主題在目前難度下的進度狀態，決定節點要顯示已完成/進行中/未開始。
+// 難度在entry畫面選定一次、13主題共用同一個難度場次，所以只需要13個KV get，不需要list(prefix)。
+async function handleOverview(request, env, headers) {
+  const body = await request.json().catch(() => null);
+  if (!body) return jsonResponse({ error: '請求格式錯誤' }, 400, headers);
+
+  const studentId = String(body.studentId || '').trim().slice(0, 100);
+  const difficulty = normalizeDifficulty(body.difficulty);
+  if (!studentId) return jsonResponse({ error: '缺少必要欄位（studentId）' }, 400, headers);
+
+  const kv = env.ESCAPE_ROOM_KV;
+  const topics = await Promise.all(
+    TOPIC_CODES.map(async (topic) => {
+      const progress = await loadProgress(kv, topic, difficulty, studentId);
+      if (!progress) return { topic, status: 'not_started' };
+      if (progress.status === 'completed') return { topic, status: 'completed' };
+      return { topic, status: 'in_progress', level: progress.level };
+    }),
+  );
+
+  return jsonResponse({ topics }, 200, headers);
+}
+
 export default {
   async fetch(request, env) {
     const allowedOrigins = parseAllowedOrigins(env);
@@ -420,6 +454,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/level/start') return handleStart(request, env, headers);
     if (url.pathname === '/level/answer') return handleAnswer(request, env, headers);
+    if (url.pathname === '/overview') return handleOverview(request, env, headers);
 
     return jsonResponse({ error: 'Not Found' }, 404, headers);
   },

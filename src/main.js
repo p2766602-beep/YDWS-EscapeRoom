@@ -1,13 +1,35 @@
-import { startTopic, submitAnswer } from './api.js';
+import { startTopic, submitAnswer, getOverview } from './api.js';
 
-// 垂直切片驗證用的主題清單（不是正式的13主題總覽選單，那是§8之後的MVP範圍）。
-const TOPICS = [
-  { code: 'max_value', name: '找最大值' },
-  { code: 'selection_sort', name: '選擇排序' },
-  { code: 'greedy', name: '貪婪演算法' },
+// 13主題官方清單（BlocklyYdws docs/密室逃脫獨立專案-架構規格.md §1/§8定案）。
+// column對應Tier1~Tier5（Tier3.5獨立一欄），純粹是總覽節點圖的排版分組，跟後端progress key無關。
+const TOPIC_MAP = [
+  { code: 'max_value', name: '找最大值', icon: '🔼', column: 1 },
+  { code: 'find_min', name: '找最小值', icon: '🔽', column: 1 },
+  { code: 'linear_search', name: '線性搜尋', icon: '🔍', column: 1 },
+  { code: 'bubble_sort', name: '氣泡排序', icon: '🫧', column: 2 },
+  { code: 'selection_sort', name: '選擇排序', icon: '🎯', column: 2 },
+  { code: 'insertion_sort', name: '插入排序', icon: '📥', column: 2 },
+  { code: 'binary_search', name: '二分搜尋', icon: '➗', column: 3 },
+  { code: 'recursion_basics', name: '遞迴基礎', icon: '🌀', column: 4 },
+  { code: 'merge_sort', name: '合併排序', icon: '🔀', column: 4 },
+  { code: 'greedy', name: '貪婪演算法', icon: '🪙', column: 5 },
+  { code: 'dfs', name: 'DFS深度優先', icon: '🕳️', column: 5 },
+  { code: 'bfs', name: 'BFS廣度優先', icon: '🌊', column: 5 },
+  { code: 'dp', name: '動態規劃', icon: '🧩', column: 6 },
 ];
 
+const COLUMN_LABELS = {
+  1: 'Tier1｜基礎',
+  2: 'Tier2｜排序三部曲',
+  3: 'Tier3｜分治',
+  4: 'Tier3.5｜遞迴橋樑',
+  5: 'Tier4｜策略與圖走訪',
+  6: 'Tier5｜總整理',
+};
+const COLUMN_COUNT = 6;
+
 // 自選難度取代年級分版：資優班內部能力落差本身就大，年級不是準確的能力代理指標。
+// entry畫面選一次，13主題共用同一個難度場次（2026-07-23確認，不做每主題各自選難度）。
 const DIFFICULTIES = [
   { code: 'basic', name: '基礎版' },
   { code: 'advanced', name: '進階版' },
@@ -16,11 +38,13 @@ const DIFFICULTIES = [
 const app = document.getElementById('app');
 
 const state = {
-  screen: 'identity', // identity | level | completed
-  topic: TOPICS[0].code,
-  topicName: TOPICS[0].name,
-  difficulty: DIFFICULTIES[0].code,
+  screen: 'entry', // entry | overview | level | completed
   studentId: '',
+  difficulty: DIFFICULTIES[0].code,
+  topic: null,
+  topicName: null,
+  overviewTopics: null, // [{code,status,level}] 從/overview抓回來的進度
+  overviewLoading: false,
   level: null,
   levelKind: null,
   content: null,
@@ -35,7 +59,9 @@ const state = {
 
 function render() {
   app.innerHTML = '';
-  if (state.screen === 'identity') return renderIdentityScreen();
+  app.classList.toggle('wide', state.screen === 'overview');
+  if (state.screen === 'entry') return renderEntryScreen();
+  if (state.screen === 'overview') return renderOverviewScreen();
   if (state.screen === 'level') return renderLevelScreen();
   if (state.screen === 'completed') return renderCompletedScreen();
 }
@@ -68,21 +94,9 @@ function renderErrorBox() {
   return el('div', { class: 'error', text: state.error });
 }
 
-function renderIdentityScreen() {
-  const seatInput = el('input', { type: 'text', id: 'seat', placeholder: '例如：12' });
+function renderEntryScreen() {
+  const seatInput = el('input', { type: 'text', id: 'seat', placeholder: '例如：ps100001' });
   const nameInput = el('input', { type: 'text', id: 'name', placeholder: '例如：王小明' });
-
-  const topicSelect = el(
-    'select',
-    {
-      onChange: (e) => {
-        state.topic = e.target.value;
-        state.topicName = TOPICS.find((t) => t.code === state.topic).name;
-      },
-    },
-    TOPICS.map((t) => el('option', { value: t.code, text: t.name })),
-  );
-  topicSelect.value = state.topic;
 
   const difficultySelect = el(
     'select',
@@ -102,42 +116,147 @@ function renderIdentityScreen() {
       const seat = seatInput.value.trim();
       const name = nameInput.value.trim();
       if (!seat || !name) {
-        state.error = '座號和姓名都要填喔，勇者。';
+        state.error = '學號和姓名都要填喔，勇者。';
         return render();
       }
-      state.studentId = `${seat}號-${name}`;
+      state.studentId = `${seat}-${name}`;
       state.error = '';
-      state.loading = true;
+      state.screen = 'overview';
       render();
-      try {
-        const data = await startTopic({
-          studentId: state.studentId,
-          topic: state.topic,
-          topicName: state.topicName,
-          difficulty: state.difficulty,
-        });
-        applyStartResponse(data);
-      } catch (err) {
-        state.error = err.message;
-      }
-      state.loading = false;
-      render();
+      await loadOverview();
     },
   });
 
   renderCard([
     el('h1', { text: '🔮 真理大廳：演算法密室逃脫' }),
-    el('label', { text: '選擇密室主題（垂直切片驗證用，非正式選單）' }),
-    topicSelect,
-    el('label', { text: '選擇難度' }),
+    el('label', { text: '選擇難度（整個旅程共用，之後不再更換）' }),
     difficultySelect,
-    el('label', { text: '座號' }),
+    el('label', { text: '學號' }),
     seatInput,
     el('label', { text: '姓名' }),
     nameInput,
     renderErrorBox(),
     submitBtn,
   ]);
+}
+
+async function loadOverview() {
+  state.overviewLoading = true;
+  state.error = '';
+  render();
+  try {
+    const data = await getOverview({ studentId: state.studentId, difficulty: state.difficulty });
+    state.overviewTopics = data.topics;
+  } catch (err) {
+    state.error = err.message;
+  }
+  state.overviewLoading = false;
+  render();
+}
+
+function statusOf(code) {
+  const found = (state.overviewTopics || []).find((t) => t.topic === code);
+  return found ? found.status : 'not_started';
+}
+
+// 建議下一步＝依Tier順序第一個「還沒完成」的主題，軟性推薦、不鎖關（任何節點都能點）。
+function recommendedCode() {
+  const notDone = TOPIC_MAP.find((t) => statusOf(t.code) !== 'completed');
+  return notDone ? notDone.code : null;
+}
+
+function renderOverviewScreen() {
+  const header = el('div', { class: 'overview-header' }, [
+    el('h1', { text: '🗺️ 真理大廳：主題總覽' }),
+    el('p', { class: 'overview-sub', text: `${state.studentId}｜${DIFFICULTIES.find((d) => d.code === state.difficulty).name}` }),
+    el('a', {
+      href: '#',
+      class: 'switch-student-link',
+      text: '換人 / 重新開始',
+      onClick: (e) => {
+        e.preventDefault();
+        resetToEntryScreen();
+      },
+    }),
+  ]);
+
+  if (state.overviewLoading) {
+    app.appendChild(header);
+    app.appendChild(el('p', { text: '讀取進度中……' }));
+    return;
+  }
+
+  const recommended = recommendedCode();
+  const track = el('div', { class: 'overview-track' });
+  const columns = el('div', { class: 'tier-columns' });
+
+  for (let col = 1; col <= COLUMN_COUNT; col += 1) {
+    const topicsInCol = TOPIC_MAP.filter((t) => t.column === col);
+    const nodeEls = topicsInCol.map((t) => renderNode(t, recommended));
+    const nodesWrap = el(
+      'div',
+      { class: `tier-nodes${topicsInCol.length > 1 ? ' has-spine' : ''}` },
+      nodeEls,
+    );
+    const column = el('div', { class: 'tier-column' }, [
+      el('div', { class: 'tier-label', text: COLUMN_LABELS[col] }),
+      nodesWrap,
+    ]);
+    columns.appendChild(column);
+  }
+
+  track.appendChild(el('div', { class: 'trunk-line' }));
+  track.appendChild(columns);
+
+  app.appendChild(header);
+  const errBox = renderErrorBox();
+  if (errBox) app.appendChild(errBox);
+  app.appendChild(track);
+}
+
+function renderNode(topicDef, recommended) {
+  const status = statusOf(topicDef.code);
+  const stateClass = status === 'completed'
+    ? 'node--done'
+    : status === 'in_progress'
+      ? 'node--in-progress'
+      : topicDef.code === recommended
+        ? 'node--recommended'
+        : 'node--available';
+
+  const badge = status === 'completed' ? '✅' : status === 'in_progress' ? '◐' : '';
+
+  return el('button', {
+    class: `node ${stateClass}`,
+    title: topicDef.name,
+    onClick: () => enterTopic(topicDef),
+  }, [
+    el('span', { class: 'node-icon', text: topicDef.icon }),
+    el('span', { class: 'node-badge', text: badge }),
+    el('span', { class: 'node-label', text: topicDef.name }),
+  ]);
+}
+
+async function enterTopic(topicDef) {
+  state.topic = topicDef.code;
+  state.topicName = topicDef.name;
+  state.error = '';
+  state.loading = true;
+  render();
+  try {
+    const data = await startTopic({
+      studentId: state.studentId,
+      topic: state.topic,
+      topicName: state.topicName,
+      difficulty: state.difficulty,
+    });
+    applyStartResponse(data);
+  } catch (err) {
+    state.error = err.message;
+    state.screen = 'overview';
+  }
+  state.loading = false;
+  render();
 }
 
 function applyStartResponse(data) {
@@ -323,9 +442,12 @@ function renderLevelScreen() {
   renderCard(children);
 }
 
-function resetToIdentityScreen() {
-  state.screen = 'identity';
+function resetToEntryScreen() {
+  state.screen = 'entry';
   state.studentId = '';
+  state.topic = null;
+  state.topicName = null;
+  state.overviewTopics = null;
   state.level = null;
   state.levelKind = null;
   state.content = null;
@@ -338,6 +460,21 @@ function resetToIdentityScreen() {
   render();
 }
 
+async function returnToOverview() {
+  state.screen = 'overview';
+  state.topic = null;
+  state.topicName = null;
+  state.level = null;
+  state.levelKind = null;
+  state.content = null;
+  state.finalKey = null;
+  state.review = null;
+  state.dragOrder = null;
+  state.lastFeedback = null;
+  render();
+  await loadOverview();
+}
+
 function renderCompletedScreen() {
   renderCard([
     el('h1', { text: '🎉 恭喜通關！' }),
@@ -345,7 +482,7 @@ function renderCompletedScreen() {
     el('p', { text: '請截圖此畫面，向現場主持人領取你的獎品！' }),
     el('div', { class: 'key-display', text: `🗝️ ${state.finalKey}` }),
     renderFragments(),
-    el('button', { class: 'btn-primary', text: '再挑戰新的密室', onClick: resetToIdentityScreen }),
+    el('button', { class: 'btn-primary', text: '返回總覽', onClick: returnToOverview }),
   ]);
 
   renderReviewCard();

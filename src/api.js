@@ -23,3 +23,7 @@ export function startTopic({ studentId, topic, topicName, difficulty }) {
 export function submitAnswer({ studentId, topic, level, mode, answer, difficulty }) {
   return postJSON('/level/answer', { studentId, topic, level, mode, answer, difficulty });
 }
+
+export function getOverview({ studentId, difficulty }) {
+  return postJSON('/overview', { studentId, difficulty });
+}
