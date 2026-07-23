@@ -21,7 +21,7 @@ iframe + postMessage嵌入本專案部署的embed頁面（比照BlocklyYdws的
 ## 怎麼找到BlocklyYdws / YDWS-CodingBank
 
 平行資料夾，路徑依電腦而異：
-- 家用電腦：`C:\cProject\BlocklyYdws`、`C:\YOSEP\YDWS-CodingBank`
+- 家用電腦：`C:\YOSEP\BlocklyYdws`、`C:\YOSEP\YDWS-CodingBank`（三專案同層目錄）
 - 學校電腦：路徑可能不同，找不到時用檔案搜尋找資料夾名稱。
 
 ## 共用的專案日誌
