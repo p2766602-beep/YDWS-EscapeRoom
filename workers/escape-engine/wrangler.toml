@@ -1,0 +1,16 @@
+name = "ydws-escaperoom-engine"
+main = "src/index.js"
+compatibility_date = "2026-07-23"
+
+kv_namespaces = [
+  # id是佔位值，本機 `wrangler dev`（非 --remote）用Miniflare本地模擬KV，不需要真的namespace。
+  # 要正式部署前，先執行 `npx wrangler kv:namespace create ESCAPE_ROOM_KV` 拿到真正id再回填。
+  { binding = "ESCAPE_ROOM_KV", id = "local-dev-placeholder" }
+]
+
+[vars]
+# 允許呼叫的前端網域，本機開發用；正式網域等要部署時再補上（比照ai-companion的ALLOWED_ORIGINS）
+ALLOWED_ORIGINS = "http://localhost:5173"
+
+# GEMINI_API_KEY 不放在這裡，本機用 .dev.vars，正式部署用：
+#   npx wrangler secret put GEMINI_API_KEY
