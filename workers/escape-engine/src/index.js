@@ -3,6 +3,7 @@ import {
   buildGenerationRequest,
   buildTextJudgeRequest,
   buildEncourageRequest,
+  buildLiteracyReviewRequest,
   publicContent,
 } from './prompts.js';
 
@@ -118,6 +119,14 @@ async function generateLevelContent(env, level, topicName, coreSentence, topicCo
   return content;
 }
 
+// 記錄嘗試紀錄時，只保留文字類回答的原始內容（規準二「人類能動性」要看玩家打字時有沒有
+// 主動追問/表達思考過程，按鈕/拖曳的選擇本身不需要留文字，pass/mode已經夠用）。
+function summarizeAnswerText(mode, answer) {
+  if (mode !== 'text') return null;
+  const text = String(answer || '').trim();
+  return text.length > 300 ? `${text.slice(0, 300)}…` : text;
+}
+
 // 玩家在按鈕/拖曳題型選擇打字回答時，用來組出「這一關認定的正解」文字，讓文字判斷通道在
 // 任何題型都能運作，不只是Level1/3那種本來就有targetKeyword的開放式題型。
 function buildReferenceAnswer(levelKind, storedContent) {
@@ -172,7 +181,7 @@ async function handleStart(request, env, headers) {
   if (progress) {
     if (progress.status === 'completed') {
       return jsonResponse(
-        { status: 'completed', fragments: progress.fragments, finalKey: progress.finalKey },
+        { status: 'completed', fragments: progress.fragments, finalKey: progress.finalKey, review: progress.review },
         200,
         headers,
       );
@@ -206,6 +215,8 @@ async function handleStart(request, env, headers) {
     currentContent: content,
     fragments: [],
     finalKey: null,
+    attemptLog: [],
+    review: null,
   };
   await saveProgress(kv, topic, studentId, progress);
 
@@ -287,7 +298,10 @@ async function handleAnswer(request, env, headers) {
     return jsonResponse({ error: '不支援的answer mode' }, 400, headers);
   }
 
+  progress.attemptLog.push({ level, mode, pass, answerText: summarizeAnswerText(mode, answer) });
+
   if (!pass) {
+    await saveProgress(kv, topic, studentId, progress);
     return jsonResponse({ pass: false, feedback }, 200, headers);
   }
 
@@ -308,9 +322,25 @@ async function handleAnswer(request, env, headers) {
     progress.status = 'completed';
     progress.finalKey = pickRandomPrime();
     progress.currentContent = null;
+
+    try {
+      const reviewReq = buildLiteracyReviewRequest({ topicName: progress.topicName, attemptLog: progress.attemptLog });
+      progress.review = await callGeminiJSON(env, reviewReq);
+    } catch (err) {
+      progress.review = null; // 回顧生成失敗不擋過關，金鑰跟碎片才是遊戲儀式感的核心產出
+    }
+
     await saveProgress(kv, topic, studentId, progress);
     return jsonResponse(
-      { pass: true, feedback, fragment, completed: true, finalKey: progress.finalKey, fragments: progress.fragments },
+      {
+        pass: true,
+        feedback,
+        fragment,
+        completed: true,
+        finalKey: progress.finalKey,
+        fragments: progress.fragments,
+        review: progress.review,
+      },
       200,
       headers,
     );

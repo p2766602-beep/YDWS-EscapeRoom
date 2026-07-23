@@ -214,6 +214,74 @@ export function buildEncourageRequest({ topicName, level }) {
   return { systemInstruction: PERSONA_INSTRUCTION, userPrompt, schema: ENCOURAGE_SCHEMA };
 }
 
+// 沿用密室逃脫檢核-GEM.md「階段五：AI協作學習與素養引導」的規準/徽章/輸出格式設計，
+// 只是輸入從「一整段對話紀錄」改成「後端記錄的逐關嘗試紀錄attemptLog」。
+const BADGE_SCALE = '完全符合➔【🌟卓越主導者】、大部分符合➔【👍漸入佳境的合作夥伴】、部分符合➔【🌱正在發芽的思考者】、未呈現➔【📢需要呼喚的主動性】';
+
+const REVIEW_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    hasEnoughEvidence: { type: 'BOOLEAN' },
+    strengths: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          criterion: { type: 'STRING' },
+          badge: { type: 'STRING' },
+          note: { type: 'STRING' },
+        },
+        required: ['criterion', 'badge', 'note'],
+      },
+    },
+    improvementCriterion: { type: 'STRING' },
+    improvementBadge: { type: 'STRING' },
+    improvementNote: { type: 'STRING' },
+    suggestedQuestion: { type: 'STRING' },
+  },
+  required: ['hasEnoughEvidence', 'strengths', 'improvementCriterion', 'improvementBadge', 'improvementNote', 'suggestedQuestion'],
+};
+
+export function buildLiteracyReviewRequest({ topicName, attemptLog }) {
+  const logText = attemptLog
+    .map((a, i) => {
+      const modeLabel = a.mode === 'text' ? '打字回答' : a.mode === 'button' ? '點選按鈕' : '拖曳排序';
+      const answerPart = a.answerText ? `，內容：「${a.answerText}」` : '';
+      return `${i + 1}. Level${a.level}／${modeLabel}／結果：${a.pass ? '過關' : '未過關'}${answerPart}`;
+    })
+    .join('\n');
+
+  const userPrompt = `玩家剛完成「${topicName}」密室逃脫任務的全部5關，這是他這一輪的完整嘗試紀錄
+（依時間順序，包含答錯重試的紀錄）：
+${logText}
+
+請依照以下規準，回顧玩家的表現並給予客製化引導，語氣溫暖、絕對不給總分或等級分數、不使用
+責備語氣：
+
+【評判規準】
+- 規準一「知識能動性」：玩家答錯或卡關時（特別留意Level2/4這類固定選項題型的重試紀錄），
+  是否看得出沉著思考、根據提示調整，而不是連續盲猜（同一關卡短時間內多次隨機嘗試）。
+- 規準二「人類能動性」：玩家在打字回答（text）的內容裡，是否有主動追問名詞意義、表達疑惑
+  或展現思考過程的痕跡，而不只是直接寫答案。
+- 規準三「創造轉型」：Level5（知識遷移危機）的表現如何，是否看得出玩家真的理解概念遷移到
+  新情境，而不是矇對。
+
+【動態剪裁規則】
+- 若嘗試紀錄裡看得出足夠的互動證據（例如有答錯重試、有打字表達思考過程），
+  hasEnoughEvidence設true：從三個規準裡，只挑「最有證據支持」的1~2個做得好的地方放進
+  strengths，以及1個下次可以更好的地方放進improvement開頭的欄位。
+- 若證據不足（例如全程一次就對、幾乎都用按鈕沒有打字說明思考），hasEnoughEvidence設false：
+  strengths留空陣列，improvement開頭欄位留空字串，suggestedQuestion固定使用：
+  「關主，我看到沒學過的名詞【＿＿】，請用最簡單的話解釋給我聽！」
+- 徽章標籤只能從這個對照表選：${BADGE_SCALE}
+- 若hasEnoughEvidence為true，suggestedQuestion要示範一句「精準對應improvement改進點」、
+  學生下次可以直接複製使用的提問句。
+
+請輸出符合schema的JSON。`;
+
+  return { systemInstruction: PERSONA_INSTRUCTION, userPrompt, schema: REVIEW_SCHEMA, temperature: 0.4 };
+}
+
 export function publicContent(level, content) {
   if (!content) return null;
   switch (level) {

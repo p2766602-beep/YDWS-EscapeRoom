@@ -18,6 +18,7 @@ const state = {
   content: null,
   fragments: [],
   finalKey: null,
+  review: null, // AI協作學習與素養引導（GEM原設計階段五）
   dragOrder: null, // Level4用：目前排列順序（steps的索引陣列）
   loading: false,
   error: '',
@@ -118,6 +119,7 @@ function applyStartResponse(data) {
     state.screen = 'completed';
     state.fragments = data.fragments;
     state.finalKey = data.finalKey;
+    state.review = data.review;
     return;
   }
   state.screen = 'level';
@@ -142,6 +144,7 @@ function applyAnswerResponse(data) {
     state.screen = 'completed';
     state.fragments = data.fragments;
     state.finalKey = data.finalKey;
+    state.review = data.review;
     state.lastFeedback = { pass: true, text: data.feedback };
     return;
   }
@@ -301,6 +304,44 @@ function renderCompletedScreen() {
     el('div', { class: 'key-display', text: `🗝️ ${state.finalKey}` }),
     renderFragments(),
   ]);
+
+  renderReviewCard();
+}
+
+function renderReviewCard() {
+  const review = state.review;
+  if (!review) return;
+
+  const children = [el('h1', { text: '🌟 真理大廳 AI協作小回顧' })];
+
+  if (!review.hasEnoughEvidence) {
+    children.push(
+      el('p', { text: '太好囉，恭喜你成功過關！這次還沒有看到足夠的解謎互動紀錄，所以先不進行完整的自學回顧。' }),
+      el('p', { text: '下次挑戰新的演算法密室時，如果遇到不會的概念、或看到沒學過的專有名詞，可以這樣問我：' }),
+      el('p', { text: `「${review.suggestedQuestion}」`, style: 'font-weight:600' }),
+    );
+    renderCard(children);
+    return;
+  }
+
+  children.push(el('h2', { text: '這次做得好的地方' }));
+  (review.strengths || []).forEach((s) => {
+    children.push(
+      el('p', { text: `${s.criterion}：${s.badge}`, style: 'font-weight:600;margin-bottom:2px' }),
+      el('p', { text: s.note, style: 'margin-top:0' }),
+    );
+  });
+
+  children.push(el('h2', { text: '下次可以更進步的地方' }));
+  children.push(
+    el('p', { text: `${review.improvementCriterion}：${review.improvementBadge}`, style: 'font-weight:600;margin-bottom:2px' }),
+    el('p', { text: review.improvementNote, style: 'margin-top:0' }),
+  );
+
+  children.push(el('h2', { text: '下次挑戰新密室，你可以這樣問我' }));
+  children.push(el('p', { text: `「${review.suggestedQuestion}」`, style: 'font-weight:600' }));
+
+  renderCard(children);
 }
 
 render();
