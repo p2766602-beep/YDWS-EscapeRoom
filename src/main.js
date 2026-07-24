@@ -1,21 +1,26 @@
 import { startTopic, submitAnswer, getOverview } from './api.js';
 
+// 圖像素材根目錄（docs/密室逃脫圖像素材清單.md，2026-07-24生成入庫）。
+// public/images/下的靜態資源要用BASE_URL組路徑，直接寫死'/images/...'在部署後（base:'/YDWS-EscapeRoom/'）會找不到檔案。
+const IMG_BASE = `${import.meta.env.BASE_URL}images/`;
+
 // 13主題官方清單（BlocklyYdws docs/密室逃脫獨立專案-架構規格.md §1/§8定案）。
 // column對應Tier1~Tier5（Tier3.5獨立一欄），純粹是總覽節點圖的排版分組，跟後端progress key無關。
+// 圖示檔案＝topic-icons/{code}.png（素材清單.md），不再用emoji。
 const TOPIC_MAP = [
-  { code: 'max_value', name: '找最大值', icon: '🔼', column: 1 },
-  { code: 'find_min', name: '找最小值', icon: '🔽', column: 1 },
-  { code: 'linear_search', name: '線性搜尋', icon: '🔍', column: 1 },
-  { code: 'bubble_sort', name: '氣泡排序', icon: '🫧', column: 2 },
-  { code: 'selection_sort', name: '選擇排序', icon: '🎯', column: 2 },
-  { code: 'insertion_sort', name: '插入排序', icon: '📥', column: 2 },
-  { code: 'binary_search', name: '二分搜尋', icon: '➗', column: 3 },
-  { code: 'recursion_basics', name: '遞迴基礎', icon: '🌀', column: 4 },
-  { code: 'merge_sort', name: '合併排序', icon: '🔀', column: 4 },
-  { code: 'greedy', name: '貪婪演算法', icon: '🪙', column: 5 },
-  { code: 'dfs', name: 'DFS深度優先', icon: '🕳️', column: 5 },
-  { code: 'bfs', name: 'BFS廣度優先', icon: '🌊', column: 5 },
-  { code: 'dp', name: '動態規劃', icon: '🧩', column: 6 },
+  { code: 'max_value', name: '找最大值', column: 1 },
+  { code: 'find_min', name: '找最小值', column: 1 },
+  { code: 'linear_search', name: '線性搜尋', column: 1 },
+  { code: 'bubble_sort', name: '氣泡排序', column: 2 },
+  { code: 'selection_sort', name: '選擇排序', column: 2 },
+  { code: 'insertion_sort', name: '插入排序', column: 2 },
+  { code: 'binary_search', name: '二分搜尋', column: 3 },
+  { code: 'recursion_basics', name: '遞迴基礎', column: 4 },
+  { code: 'merge_sort', name: '合併排序', column: 4 },
+  { code: 'greedy', name: '貪婪演算法', column: 5 },
+  { code: 'dfs', name: 'DFS深度優先', column: 5 },
+  { code: 'bfs', name: 'BFS廣度優先', column: 5 },
+  { code: 'dp', name: '動態規劃', column: 6 },
 ];
 
 const COLUMN_LABELS = {
@@ -27,6 +32,19 @@ const COLUMN_LABELS = {
   6: 'Tier5｜總整理',
 };
 const COLUMN_COUNT = 6;
+
+// column→tier-icons檔名（COLUMN_LABELS的Tier編號跟column索引不是1:1，對照素材清單.md）。
+const COLUMN_ICON_FILES = {
+  1: 'tier-icon-1.png',
+  2: 'tier-icon-2.png',
+  3: 'tier-icon-3.png',
+  4: 'tier-icon-3-5.png',
+  5: 'tier-icon-4.png',
+  6: 'tier-icon-5.png',
+};
+
+document.body.style.backgroundImage = `url('${IMG_BASE}frames/bg-texture-parchment.png')`;
+document.body.style.backgroundRepeat = 'repeat';
 
 // 自選難度取代年級分版：資優班內部能力落差本身就大，年級不是準確的能力代理指標。
 // entry畫面選一次，13主題共用同一個難度場次（2026-07-23確認，不做每主題各自選難度）。
@@ -160,7 +178,10 @@ function renderEntryScreen() {
   ]);
 
   renderCard([
-    el('h1', { text: '🔮 真理大廳：演算法密室逃脫' }),
+    el('div', { class: 'title-row' }, [
+      el('img', { class: 'gm-avatar-img', src: `${IMG_BASE}avatars/gm-avatar.png`, alt: '關主' }),
+      el('h1', { text: '真理大廳：演算法密室逃脫' }),
+    ]),
     difficultyRow,
     seatRow,
     seatInput,
@@ -209,7 +230,10 @@ function recommendedCode() {
 function renderOverviewScreen() {
   const header = el('div', { class: 'overview-header' }, [
     el('h1', { text: '🗺️ 真理大廳：主題探索地圖' }),
-    el('p', { class: 'overview-sub', text: `${state.studentId}｜${DIFFICULTIES.find((d) => d.code === state.difficulty).name}` }),
+    el('p', { class: 'overview-sub' }, [
+      el('img', { class: 'student-avatar-img', src: `${IMG_BASE}avatars/student-avatar.png`, alt: '學徒' }),
+      document.createTextNode(`${state.studentId}｜${DIFFICULTIES.find((d) => d.code === state.difficulty).name}`),
+    ]),
     el('a', {
       href: '#',
       class: 'switch-student-link',
@@ -239,10 +263,11 @@ function renderOverviewScreen() {
       { class: `tier-nodes${topicsInCol.length > 1 ? ' has-spine' : ''}` },
       nodeEls,
     );
-    const column = el('div', { class: 'tier-column' }, [
-      el('div', { class: 'tier-label', text: COLUMN_LABELS[col] }),
-      nodesWrap,
+    const tierLabel = el('div', { class: 'tier-label' }, [
+      el('img', { class: 'tier-icon-img', src: `${IMG_BASE}tier-icons/${COLUMN_ICON_FILES[col]}`, alt: '' }),
+      document.createTextNode(COLUMN_LABELS[col]),
     ]);
+    const column = el('div', { class: 'tier-column' }, [tierLabel, nodesWrap]);
     columns.appendChild(column);
   }
 
@@ -260,22 +285,22 @@ function renderNode(topicDef, recommended) {
   const achievement = achievementOf(topicDef.code);
 
   let stateClass;
-  let badge;
+  let badgeEl;
   if (achievement === 'advanced') {
     stateClass = 'node--ach-advanced';
-    badge = '🏆';
+    badgeEl = el('img', { class: 'node-badge node-badge-img', src: `${IMG_BASE}badges/badge-advanced.png`, alt: '進階版過關' });
   } else if (achievement === 'basic') {
     stateClass = 'node--ach-basic';
-    badge = '✅';
+    badgeEl = el('img', { class: 'node-badge node-badge-img', src: `${IMG_BASE}badges/badge-basic.png`, alt: '基礎版過關' });
   } else if (status === 'in_progress') {
     stateClass = 'node--in-progress';
-    badge = '◐';
+    badgeEl = el('span', { class: 'node-badge', text: '◐' });
   } else if (topicDef.code === recommended) {
     stateClass = 'node--recommended';
-    badge = '';
+    badgeEl = null;
   } else {
     stateClass = 'node--available';
-    badge = '';
+    badgeEl = null;
   }
 
   return el('button', {
@@ -283,8 +308,8 @@ function renderNode(topicDef, recommended) {
     title: topicDef.name,
     onClick: () => enterTopic(topicDef),
   }, [
-    el('span', { class: 'node-icon', text: topicDef.icon }),
-    el('span', { class: 'node-badge', text: badge }),
+    el('img', { class: 'node-icon-img', src: `${IMG_BASE}topic-icons/${topicDef.code}.png`, alt: topicDef.name }),
+    badgeEl,
     el('span', { class: 'node-label', text: topicDef.name }),
   ]);
 }
@@ -405,7 +430,10 @@ function renderLevelScreen() {
   const kind = state.levelKind;
   const content = state.content;
   const children = [
-    el('h1', { text: `${state.topicName} — Level ${state.level} / 5` }),
+    el('div', { class: 'title-row' }, [
+      el('img', { class: 'gm-avatar-img gm-avatar-img--small', src: `${IMG_BASE}avatars/gm-avatar.png`, alt: '關主' }),
+      el('h1', { text: `${state.topicName} — Level ${state.level} / 5` }),
+    ]),
     el('a', {
       href: '#',
       class: 'level-back-link',
@@ -537,11 +565,17 @@ async function returnToOverview() {
 }
 
 function renderCompletedScreen() {
+  const keyFrame = el('div', { class: 'key-frame' }, [
+    el('div', { class: 'key-display', text: `🗝️ ${state.finalKey}` }),
+  ]);
+  keyFrame.style.backgroundImage = `url('${IMG_BASE}frames/key-card-frame.png')`;
+
   renderCard([
-    el('h1', { text: '🎉 恭喜通關！' }),
+    el('img', { class: 'trophy-img', src: `${IMG_BASE}badges/trophy-cup.png`, alt: '獎盃' }),
+    el('h1', { text: '🎉 恭喜通關！', style: 'text-align:center' }),
     el('p', { text: `${state.studentId} 完成了「${state.topicName}」密室逃脫任務！` }),
     el('p', { text: '請截圖此畫面，向現場主持人領取你的獎品！' }),
-    el('div', { class: 'key-display', text: `🗝️ ${state.finalKey}` }),
+    keyFrame,
     renderFragments(),
     el('button', { class: 'btn-primary', text: '返回總覽', onClick: returnToOverview }),
   ]);

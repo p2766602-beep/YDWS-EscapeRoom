@@ -6,7 +6,7 @@ body {
   margin: 0;
   min-height: 100vh;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
-  background: #0f172a;
+  background-color: #0f172a;
   color: #e2e8f0;
   display: flex;
   justify-content: center;
@@ -326,6 +326,7 @@ button {
   justify-content: center;
   gap: 2px;
   padding: 4px;
+  transition: opacity 0.15s ease, border-color 0.15s ease;
 }
 
 .node-icon {
@@ -349,6 +350,12 @@ button {
 
 .node--available {
   opacity: 0.55;
+}
+
+.node--available:hover,
+.node--available:focus-visible {
+  opacity: 1;
+  border-color: rgba(148, 163, 184, 0.7);
 }
 
 .node--in-progress {
@@ -375,4 +382,76 @@ button {
 @keyframes node-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.5); }
   50% { box-shadow: 0 0 0 8px rgba(99, 102, 241, 0); }
+}
+
+/* ===== 圖像素材（docs/密室逃脫圖像素材清單.md） ===== */
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.title-row h1 {
+  margin: 0;
+}
+
+.gm-avatar-img {
+  width: 84px;
+  height: 84px;
+  flex-shrink: 0;
+}
+
+.gm-avatar-img--small {
+  width: 52px;
+  height: 52px;
+}
+
+.student-avatar-img {
+  width: 28px;
+  height: 28px;
+  vertical-align: middle;
+  margin-right: 6px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(251, 191, 36, 0.5);
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.node-icon-img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.node-badge-img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+.tier-icon-img {
+  display: block;
+  width: 32px;
+  height: 32px;
+  margin: 0 auto 4px;
+  object-fit: contain;
+}
+
+.trophy-img {
+  display: block;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 8px;
+}
+
+.key-frame {
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  padding: 40px 90px;
+  margin: 16px 0;
+}
+
+.key-frame .key-display {
+  margin: 0;
 }
