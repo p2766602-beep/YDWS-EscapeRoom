@@ -113,8 +113,8 @@ function renderErrorBox() {
 }
 
 function renderEntryScreen() {
-  const seatInput = el('input', { type: 'text', id: 'seat', placeholder: '例如：ps100001' });
-  const nameInput = el('input', { type: 'text', id: 'name', placeholder: '例如：王小明' });
+  const seatInput = el('input', { type: 'text', id: 'seat' });
+  const nameInput = el('input', { type: 'text', id: 'name' });
   const firstTimeCheckbox = el('input', { type: 'checkbox', id: 'first-time' });
 
   const difficultySelect = el(
